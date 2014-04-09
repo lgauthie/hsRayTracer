@@ -32,7 +32,7 @@ aspectRatio world = w'/h'
         h' = fromIntegral $ height world
 
 angle :: World -> Double
-angle world = tan $ pi * 0.5 * (fov world) / 180.0
+angle world = tan $ pi * 0.5 * fov world / 180.0
 
 getColor :: Entity -> Vector Double
 getColor (Entity  _ c) = c
@@ -85,7 +85,7 @@ normalize :: Vector Double -> Vector Double
 normalize v = scale ((/) 1 $ sqrt $ v `dot` v) v
 
 traceRayThroughCoords :: Int -> Int -> World -> Vector Double
-traceRayThroughCoords x y world = traceRay initialRay world
+traceRayThroughCoords x y world = traceRay world initialRay
   where
     initialRay = computeInitialRay x y world
 
@@ -98,8 +98,8 @@ computeInitialRay x y world = Ray { direction = dir, origin = 3 |> [0,0,0] }
     w' = fromIntegral $ width world :: Double
     inv_width  = 1/w'
     inv_height = 1/h'
-    a = (2 * ((x' + 0.5) * inv_width) - 1) * (angle world) * (aspectRatio world)
-    b = (1 - 2 * ((y' + 0.5) * inv_height)) * (angle world)
+    a = (2 * ((x' + 0.5) * inv_width) - 1) * angle world * aspectRatio world
+    b = (1 - 2 * ((y' + 0.5) * inv_height)) * angle world
     dir = normalize $ 3 |> [a, b, -1.0]
 
 traceRay :: World -> Ray -> Vector Double
