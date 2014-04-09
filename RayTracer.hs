@@ -75,9 +75,9 @@ toPixel :: Vector Double -> PixelRGB8
 toPixel vec = PixelRGB8 x y z
   where
     double2Word8 = fromIntegral . truncate
-    x = double2Word8 $ vec @> 0
-    y = double2Word8 $ vec @> 1
-    z = double2Word8 $ vec @> 2
+    x = double2Word8 $ (vec @> 0) * 128
+    y = double2Word8 $ (vec @> 1) * 128
+    z = double2Word8 $ (vec @> 2) * 128
 
 normalize :: Vector Double -> Vector Double
 normalize v = scale ((/) 1 $ sqrt $ v `dot` v) v
