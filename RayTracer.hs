@@ -104,14 +104,14 @@ traceRay :: Ray -> World -> Vector Double
 traceRay ray world = maybe (3 |> [0,0,0]) getColor entity
   where
     ((distance, entity), _) = mapAccumR fn (Nothing, Nothing) (entities world)
-    fn acc entity = case maybeDistance of
-        Nothing  -> (acc, maybeDistance)
+    fn acc entity' = case maybeDistance of
+        Nothing   -> (acc, maybeDistance)
         Just newDist -> case acc of
-            (Nothing, _)              -> ((Just newDist, Just entity), maybeDistance)
+            (Nothing, _)              -> ((Just newDist, Just entity'), maybeDistance)
             (Just oldDist, oldEntity) -> (if oldDist > newDist
-                                            then (Just newDist, Just entity)
+                                            then (Just newDist, Just entity')
                                             else (Just oldDist, oldEntity), maybeDistance)
-      where maybeDistance = intersected ray $ shape entity
+      where maybeDistance = intersected ray $ shape entity'
 
 --    reflect_dir = reflect(light_dir, normal)
 --
