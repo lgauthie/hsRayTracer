@@ -3,10 +3,10 @@ module Main where
 import Data.Packed.Vector
 import Numeric.Container
 import Codec.Picture
-import Data.List (mapAccumL)
+import Data.List (mapAccumR)
 
 data Shape
-    = Sphere !(Vector Double) !Double !(Vector Double)
+    = Sphere !(Vector Double) !Double
     | Plane  !(Vector Double)
     deriving (Show)
 data Ray = Ray
@@ -14,11 +14,16 @@ data Ray = Ray
     , origin :: Vector Double
     } deriving (Show)
 data World = World
-    { entities :: [Shape]
+    { entities :: [Entity]
     , width :: Int
     , height :: Int
     , fov :: Double
-    } deriving (Show)
+    }
+data Entity = Entity
+    { shape :: Shape
+    , color :: Vector Double
+    }
+
 
 aspectRatio :: World -> Double
 aspectRatio world = w'/h'
@@ -28,8 +33,8 @@ aspectRatio world = w'/h'
 angle :: World -> Double
 angle world = tan $ pi * 0.5 * (fov world) / 180.0
 
-color :: Shape -> Vector Double
-color (Sphere _ _ c) = c
+getColor :: Entity -> Vector Double
+getColor (Entity  _ c) = c
 
 main :: IO ()
 main = writePng "out.png" $ generateImage pixelRenderer w h
@@ -37,11 +42,26 @@ main = writePng "out.png" $ generateImage pixelRenderer w h
     w = 300
     h = 240
     entities' =
-        [ Sphere (fromList [5.0, -1.0, -15.0]) 4 (fromList [128, 0, 0])
-        , Sphere (fromList [0.0, -10003.0, -20.0]) 10000 (fromList [0, 128, 0])
-        , Sphere (fromList [0.0, 0.0, -20.0]) 4 (fromList [0, 0, 128])
-        , Sphere (fromList [5.0, 0.0, -25.0]) 4 (fromList [0, 128, 128])
-        , Sphere (fromList [-5.5, 0.0, -25.0]) 4 (fromList [128, 128, 0])
+        [ Entity {
+            shape=Sphere (fromList [5.0, -1.0, -15.0]) 4
+           ,color=fromList [1, 0, 0]
+           }
+        , Entity {
+            shape=Sphere (fromList [0.0, -10003.0, -20.0]) 10000
+           ,color=fromList [0, 1, 0]
+           }
+        , Entity {
+            shape=Sphere (fromList [0.0, 0.0, -20.0]) 4
+           ,color=fromList [0, 0, 1]
+           }
+        , Entity {
+            shape=Sphere (fromList [5.0, 0.0, -25.0]) 4
+           ,color=fromList [0, 1, 1]
+           }
+        , Entity {
+            shape=Sphere (fromList [-5.5, 0.0, -25.0]) 4
+           ,color=fromList [1, 1, 0]
+           }
         ]
     world = World
         { entities = entities'
@@ -81,19 +101,39 @@ computeInitialRay x y world = Ray { direction = dir, origin = 3 |> [0,0,0] }
     dir = normalize $ 3 |> [a, b, -1.0]
 
 traceRay :: Ray -> World -> Vector Double
-traceRay ray world = c
+traceRay ray world = maybe (3 |> [0,0,0]) getColor entity
   where
-    -- Oh dear god...
-    ((intersect, c), _) = mapAccumL fn (Nothing, 3 |> [0,0,0]) (entities world)
-    fn acc x = case intersection of
-        Nothing -> (acc, intersection)
-        Just new -> case acc of
-            (Nothing, _) -> ((Just new, color x), intersection)
-            (Just old, c) -> (if old > new then (Just new, color x) else (Just old, c), intersection)
-      where intersection = intersected ray x
+    ((distance, entity), _) = mapAccumR fn (Nothing, Nothing) (entities world)
+    fn acc entity = case maybeDistance of
+        Nothing  -> (acc, maybeDistance)
+        Just newDist -> case acc of
+            (Nothing, _)              -> ((Just newDist, Just entity), maybeDistance)
+            (Just oldDist, oldEntity) -> (if oldDist > newDist
+                                            then (Just newDist, Just entity)
+                                            else (Just oldDist, oldEntity), maybeDistance)
+      where maybeDistance = intersected ray $ shape entity
+
+--    reflect_dir = reflect(light_dir, normal)
+--
+--    lambertian = max(light_dir.dot(normal), 0.0);
+--    specular = 0.0
+--
+--    if lambertian > 0.0:
+--        spec_angle = reflect_dir.dot(ray_dir)
+--        specular = pow(max(spec_angle, 0.0), entity.material.shininess)
+--
+--    specular_reflection = specular * entity.material.specular
+--
+--    diffuse_reflection = lambertian * entity.material.diffuse
+--
+--    m_color = entity.material.color * (1 - entity.material.transparency)
+--    return specular_reflection * m_color \
+--         + diffuse_reflection * m_color \
+--         + entity.material.ambient * m_color
+
 
 intersected :: Ray -> Shape -> Maybe Double
-intersected ray s@(Sphere center radius _)
+intersected ray (Sphere center radius)
     | tca < 0       = Nothing
     | d2 > radius^2 = Nothing
     | t0 > 0        = Just t0
