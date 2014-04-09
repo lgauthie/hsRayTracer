@@ -15,6 +15,7 @@ data Ray = Ray
     } deriving (Show)
 data World = World
     { entities :: [Entity]
+    , lights :: [Vector Double]
     , width :: Int
     , height :: Int
     , fov :: Double
@@ -65,6 +66,7 @@ main = writePng "out.png" $ generateImage pixelRenderer w h
         ]
     world = World
         { entities = entities'
+        , lights = [fromList [-16.0, 5.0, 15.0]]
         , width = w
         , height = h
         , fov = 70.0
@@ -100,18 +102,19 @@ computeInitialRay x y world = Ray { direction = dir, origin = 3 |> [0,0,0] }
     b = (1 - 2 * ((y' + 0.5) * inv_height)) * (angle world)
     dir = normalize $ 3 |> [a, b, -1.0]
 
-traceRay :: Ray -> World -> Vector Double
-traceRay ray world = maybe (3 |> [0,0,0]) getColor entity
+traceRay :: World -> Ray -> Vector Double
+traceRay world ray = maybe (3 |> [0,0,0]) (computeLight world ray distance) entity
   where
-    ((distance, entity), _) = mapAccumR fn (Nothing, Nothing) (entities world)
-    fn acc entity' = case maybeDistance of
-        Nothing   -> (acc, maybeDistance)
-        Just newDist -> case acc of
-            (Nothing, _)              -> ((Just newDist, Just entity'), maybeDistance)
-            (Just oldDist, oldEntity) -> (if oldDist > newDist
-                                            then (Just newDist, Just entity')
-                                            else (Just oldDist, oldEntity), maybeDistance)
+    ((distance, entity), _) = mapAccumR fn (1/0, Nothing) (entities world)
+    fn acc@(oldDist, oldEntity) entity' = case maybeDistance of
+        Nothing      -> (acc, maybeDistance)
+        Just newDist -> (if oldDist > newDist
+                            then (newDist, Just entity')
+                            else (oldDist, oldEntity), maybeDistance)
       where maybeDistance = intersected ray $ shape entity'
+
+computeLight :: World -> Ray -> Double -> Entity -> Vector Double
+computeLight _ _ _ = getColor
 
 --    reflect_dir = reflect(light_dir, normal)
 --
