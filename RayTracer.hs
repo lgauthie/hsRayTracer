@@ -30,18 +30,6 @@ data Entity = Entity
     , shinyness :: Double
     }
 
-
-aspectRatio :: World -> Double
-aspectRatio world = w'/h'
-  where w' = fromIntegral $ width world
-        h' = fromIntegral $ height world
-
-angle :: World -> Double
-angle world = tan $ pi * 0.5 * fov world / 180.0
-
-getColor :: Entity -> Color
-getColor (Entity _ c _) = c
-
 main :: IO ()
 main = writePng "out.png" $ generateImage pixelRenderer w h
   where
@@ -83,6 +71,21 @@ main = writePng "out.png" $ generateImage pixelRenderer w h
         }
     pixelRenderer x y = toPixel $ traceRayThroughCoords x y world
 
+-- | Helper to get world aspect ratio
+aspectRatio :: World -> Double
+aspectRatio world = w'/h'
+  where w' = fromIntegral $ width world
+        h' = fromIntegral $ height world
+
+-- | Helper to get world angle
+angle :: World -> Double
+angle world = tan $ pi * 0.5 * fov world / 180.0
+
+-- | Helper function to get an entities color
+getColor :: Entity -> Color
+getColor (Entity _ c _) = c
+
+-- | Helper function to convert a color into a valid RGB value
 toPixel :: Color -> PixelRGB8
 toPixel vec = PixelRGB8 x y z
   where
@@ -91,15 +94,20 @@ toPixel vec = PixelRGB8 x y z
     y = double2Word8 $ (vec @> 1) * 128
     z = double2Word8 $ (vec @> 2) * 128
 
-normalize :: Vec3 -> Vec3
-normalize v = scale ((/) 1 $ sqrt $ v `dot` v) v
-
-traceRayThroughCoords :: Int -> Int -> World -> Color
+-- | Calculates the color of a ray at the given coords
+traceRayThroughCoords :: Int   -- ^ The pixel's x location
+                      -> Int   -- ^ The pixel's y location
+                      -> World -- ^ The world to render
+                      -> Color -- ^ The color of the current pixel
 traceRayThroughCoords x y world = traceRay world initialRay
-  where
-    initialRay = computeInitialRay x y world
+  where initialRay = computeInitialRay x y world
 
-computeInitialRay :: Int -> Int -> World -> Ray
+-- | Helper to calculate the initil ray
+-- | If I were to add a proper camera this would be the place to do it!
+computeInitialRay :: Int   -- ^ The numper of pixels in the x dimension
+                  -> Int   -- ^ The number of pixels in the y dimension
+                  -> World -- ^ The world to be rendered
+                  -> Ray   -- ^ Returns the initial ray to trace
 computeInitialRay x y world = Ray { direction = dir, origin = 3 |> [0,0,0] }
   where
     x' = fromIntegral x :: Double
@@ -112,9 +120,12 @@ computeInitialRay x y world = Ray { direction = dir, origin = 3 |> [0,0,0] }
     b = (1 - 2 * ((y' + 0.5) * inv_height)) * angle world
     dir = normalize $ 3 |> [a, b, -1.0]
 
-traceRay :: World -> Ray -> Color
-traceRay world ray = maybe (3 |> [0,0,0]) (computeLight world ray distance) entity
+traceRay :: World -- ^ The world to render
+         -> Ray   -- ^ The current ray to trace
+         -> Color -- ^ The color of the current ray
+traceRay world ray = maybe (3 |> [0,0,0]) (computeLight world ray intersect) entity
   where
+    intersect = origin ray `add` (distance `scale` direction ray)
     ((distance, entity), _) = mapAccumR fn (1/0, Nothing) (entities world)
     fn acc@(oldDist, oldEntity) entity' = case maybeDistance of
         Nothing      -> (acc, maybeDistance)
@@ -123,11 +134,14 @@ traceRay world ray = maybe (3 |> [0,0,0]) (computeLight world ray distance) enti
                             else (oldDist, oldEntity) , maybeDistance)
       where maybeDistance = intersected ray $ shape entity'
 
-computeLight :: World -> Ray -> Double -> Entity -> Color
-computeLight world ray dist ent = specular_refl `add` diffuse_refl
+computeLight :: World  -- ^ The world to render
+             -> Ray    -- ^ The current ray
+             -> Vec3   -- ^ The intersection point
+             -> Entity -- ^ The entity that is intersected
+             -> Color  -- ^ Returns the color for the current ray/object/lights
+computeLight world ray intersect ent = specular_refl `add` diffuse_refl
   where
     -- light_dist = norm2 $ lights world !! 1 `sub` intersect
-    intersect = origin ray `add` (dist `scale` direction ray)
     normal = getNormal intersect $ shape ent
     light_dir = normalize $ (head . lights) world `sub` intersect
     reflect_dir = reflect light_dir normal
@@ -139,7 +153,10 @@ computeLight world ray dist ent = specular_refl `add` diffuse_refl
     specular_refl = specular `scale` (3 |> [1,1,1]) `mul` getColor ent
     diffuse_refl = lambertian `scale` (3 |> [0.9,0.9,0.9]) `mul` getColor ent
 
-reflect :: Vec3 -> Vec3 -> Vec3
+-- | Used to reflect a vector about a given normal
+reflect :: Vec3 -- ^ The incoming Vector
+        -> Vec3 -- ^ The normal to reflect around
+        -> Vec3 -- ^ Returns the reflected Vector
 reflect i n =  i `sub` (2.0 `scale` (n `dot` i `scale` n))
 
 getNormal :: Vec3  -- ^ The point of intersection
@@ -147,7 +164,13 @@ getNormal :: Vec3  -- ^ The point of intersection
           -> Vec3  -- ^ Returns the normal of the shape at the intersection
 getNormal inter (Sphere center _) = normalize $ inter `sub` center
 
-intersected :: Ray -> Shape -> Maybe Double
+-- | Normalizes a given vector
+normalize :: Vec3 -> Vec3
+normalize v = scale ((/) 1 $ sqrt $ v `dot` v) v
+
+intersected :: Ray          -- ^ The ray to check against the shape
+            -> Shape        -- ^ The shape to check for collision
+            -> Maybe Double -- ^ Returns Maybe distance
 intersected ray (Sphere center radius)
     | tca < 0   = Nothing
     | d2 > r2   = Nothing
