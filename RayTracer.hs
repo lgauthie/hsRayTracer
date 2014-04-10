@@ -27,6 +27,7 @@ data Entity = Entity
     { shape :: Shape
     , color :: Color
     , shinyness :: Double
+    , reflectiveness :: Double
     }
 
 main :: IO ()
@@ -39,26 +40,31 @@ main = writePng "out.png" $ generateImage pixelRenderer w h
             shape=Sphere (fromList [5.0, -1.0, -15.0]) 4
            ,color=fromList [1, 0, 0]
            ,shinyness=1.0
+           ,reflectiveness=0
            }
         , Entity {
             shape=Sphere (fromList [0.0, -10003.0, -20.0]) 10000
-           ,color=fromList [0, 1, 0]
+           ,color=fromList [0.5, 0.5, 1]
            ,shinyness=24.0
+           ,reflectiveness=0.9
            }
         , Entity {
             shape=Sphere (fromList [0.0, 0.0, -20.0]) 4
            ,color=fromList [0, 0, 1]
            ,shinyness=16.0
+           ,reflectiveness=0
            }
         , Entity {
             shape=Sphere (fromList [5.0, 0.0, -25.0]) 4
            ,color=fromList [0, 1, 1]
            ,shinyness=8.0
+           ,reflectiveness=0
            }
         , Entity {
             shape=Sphere (fromList [-5.5, 0.0, -25.0]) 4
            ,color=fromList [1, 1, 0]
            ,shinyness=8.0
+           ,reflectiveness=0
            }
         ]
     world = World
@@ -82,7 +88,7 @@ angle world = tan $ pi * 0.5 * fov world / 180.0
 
 -- | Helper function to get an entities color
 getColor :: Entity -> Color
-getColor (Entity _ c _) = c
+getColor (Entity _ c _ _) = c
 
 -- | Helper function to convert a color into a valid RGB value
 toPixel :: Color -> PixelRGB8
@@ -98,7 +104,7 @@ traceRayThroughCoords :: Int   -- ^ The pixel's x location
                       -> Int   -- ^ The pixel's y location
                       -> World -- ^ The world to render
                       -> Color -- ^ The color of the current pixel
-traceRayThroughCoords x y world = traceRay world initialRay
+traceRayThroughCoords x y world = traceRay world initialRay 5
   where initialRay = computeInitialRay x y world
 
 -- | Helper to calculate the initil ray
@@ -121,8 +127,9 @@ computeInitialRay x y world = Ray { direction = dir, origin = 3 |> [0,0,0] }
 
 traceRay :: World -- ^ The world to render
          -> Ray   -- ^ The current ray to trace
+         -> Int   -- ^ The current ray to trace
          -> Color -- ^ The color of the current ray
-traceRay world ray = maybe (3 |> [0,0,0]) light entity
+traceRay world ray depth = maybe (3 |> [0,0,0]) recursivelyTrace entity
   where
     -- Find the nearest entity that intersects the current ray
     (distance, entity) = foldr fn (1/0, Nothing) (entities world)
@@ -131,10 +138,17 @@ traceRay world ray = maybe (3 |> [0,0,0]) light entity
         case maybeDistance of
             Nothing      -> acc
             Just newDist -> if oldDist > newDist
-                                then (newDist, Just entity')
-                                else acc
-    light = computeLight world ray intersect
-    -- Calculate the point of intersection
+                               then (newDist, Just entity')
+                               else acc
+    -- Helper to recursively trace reflective entities
+    recursivelyTrace ent =
+        if depth > 0 && refl > 0.05
+           then curColor `add` traceRay world reflRay (depth - 1)
+           else curColor
+      where reflRay = Ray {origin=intersect, direction=ray_dir}
+            curColor = computeLight world ray intersect ent
+            ray_dir = reflect (direction ray) $ getNormal intersect (shape ent)
+    refl = maybe 0 reflectiveness entity
     intersect = origin ray `add` (distance `scale` direction ray)
 
 computeLight :: World  -- ^ The world to render
