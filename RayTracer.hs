@@ -126,12 +126,13 @@ traceRay world ray = maybe (3 |> [0,0,0]) light entity
   where
     -- Find the nearest entity that intersects the current ray
     (distance, entity) = foldr fn (1/0, Nothing) (entities world)
-    fn entity' acc@(oldDist, _) = case maybeDistance of
-        Nothing      -> acc
-        Just newDist -> if oldDist > newDist
-                            then (newDist, Just entity')
-                            else acc
-      where maybeDistance = intersected ray $ shape entity'
+    fn entity' acc@(oldDist, _) = do
+        let maybeDistance = intersected ray $ shape entity'
+        case maybeDistance of
+            Nothing      -> acc
+            Just newDist -> if oldDist > newDist
+                                then (newDist, Just entity')
+                                else acc
     light = computeLight world ray intersect
     -- Calculate the point of intersection
     intersect = origin ray `add` (distance `scale` direction ray)
