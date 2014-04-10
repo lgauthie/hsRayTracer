@@ -3,7 +3,6 @@ module Main where
 import Data.Packed.Vector
 import Numeric.Container
 import Codec.Picture
-import Data.List (mapAccumR)
 
 -- TODO: Is there a good way to actually constrain this to Vec3?
 type Vec3  = Vector Double
@@ -123,16 +122,19 @@ computeInitialRay x y world = Ray { direction = dir, origin = 3 |> [0,0,0] }
 traceRay :: World -- ^ The world to render
          -> Ray   -- ^ The current ray to trace
          -> Color -- ^ The color of the current ray
-traceRay world ray = maybe (3 |> [0,0,0]) (computeLight world ray intersect) entity
+traceRay world ray = maybe (3 |> [0,0,0]) light entity
   where
-    intersect = origin ray `add` (distance `scale` direction ray)
-    ((distance, entity), _) = mapAccumR fn (1/0, Nothing) (entities world)
-    fn acc@(oldDist, oldEntity) entity' = case maybeDistance of
-        Nothing      -> (acc, maybeDistance)
-        Just newDist -> (if oldDist > newDist
+    -- Find the nearest entity that intersects the current ray
+    (distance, entity) = foldr fn (1/0, Nothing) (entities world)
+    fn entity' acc@(oldDist, _) = case maybeDistance of
+        Nothing      -> acc
+        Just newDist -> if oldDist > newDist
                             then (newDist, Just entity')
-                            else (oldDist, oldEntity) , maybeDistance)
+                            else acc
       where maybeDistance = intersected ray $ shape entity'
+    light = computeLight world ray intersect
+    -- Calculate the point of intersection
+    intersect = origin ray `add` (distance `scale` direction ray)
 
 computeLight :: World  -- ^ The world to render
              -> Ray    -- ^ The current ray
