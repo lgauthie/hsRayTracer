@@ -133,9 +133,8 @@ traceRay world ray depth = maybe (3 |> [0,0,0]) recursivelyTrace entity
   where
     -- Find the nearest entity that intersects the current ray
     (distance, entity) = foldr fn (1/0, Nothing) (entities world)
-    fn entity' acc@(oldDist, _) = do
-        let maybeDistance = intersected ray $ shape entity'
-        case maybeDistance of
+    fn entity' acc@(oldDist, _) =
+        case intersected ray $ shape entity' of
             Nothing      -> acc
             Just newDist -> if oldDist > newDist
                                then (newDist, Just entity')
@@ -145,9 +144,10 @@ traceRay world ray depth = maybe (3 |> [0,0,0]) recursivelyTrace entity
         if depth > 0 && refl > 0.05
            then curColor `add` traceRay world reflRay (depth - 1)
            else curColor
-      where reflRay = Ray {origin=intersect, direction=ray_dir}
-            curColor = computeLight world ray intersect ent
-            ray_dir = reflect (direction ray) $ getNormal intersect (shape ent)
+      where reflRay = Ray {origin=intersect', direction=reflDir}
+            curColor = computeLight world ray intersect' ent
+            reflDir = reflect (direction ray) $ getNormal intersect (shape ent)
+            intersect' = intersect `add` (0.1 `scale` reflDir)
     refl = maybe 0 reflectiveness entity
     intersect = origin ray `add` (distance `scale` direction ray)
 
@@ -160,9 +160,9 @@ computeLight world ray intersect ent = specular_refl `add` diffuse_refl
   where
     -- light_dist = norm2 $ lights world !! 1 `sub` intersect
     normal = getNormal intersect $ shape ent
-    light_dir = normalize $ (head . lights) world `sub` intersect
-    reflect_dir = reflect light_dir normal
-    lambertian = max (light_dir `dot` normal) 0.0
+    lightDir = normalize $ (head . lights) world `sub` intersect
+    reflect_dir = reflect lightDir normal
+    lambertian = max (lightDir `dot` normal) 0.0
     specular = if lambertian > 0.0
                   then max spec_angle 0.0 ** 5
                   else 0.0
@@ -175,6 +175,33 @@ reflect :: Vec3 -- ^ The incoming Vector
         -> Vec3 -- ^ The normal to reflect around
         -> Vec3 -- ^ Returns the reflected Vector
 reflect i n =  i `sub` (2.0 `scale` (n `dot` i `scale` n))
+
+refract :: Vec3 -> Vec3 -> Double -> Double -> Maybe Vec3
+refract i n refIndex1 refIndex2
+    | sinT2 > 1 = Nothing
+    | otherwise = Just val
+  where
+    ref = refIndex1/refIndex2
+    n' = (-1) `scale` n
+    cosI = n' `dot` i
+    sinT2 = ref * ref * (1 - cosI - cosI)
+    cosT = sqrt (1 - sinT2)
+    val = (ref `scale` i) `add` ((ref * cosI - cosT) `scale` n)
+
+
+-- def refract(I, N, n1, n2):
+--     """
+--     n1 -- index of refraction of original medium
+--     n2 -- index of refraction of new medium
+--     """
+--     n = n1/n2
+--     cosI = -N.dot(I)
+--     sinT2 = n * n * (1 - cosI * cosI)
+--     if sinT2 > 1:
+--         return None
+--     cosT = m.sqrt(1 - sinT2)
+--     return n * I + (n * cosI - cosT) * N
+
 
 getNormal :: Vec3  -- ^ The point of intersection
           -> Shape -- ^ The shape to get the normal for
